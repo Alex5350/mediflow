@@ -1,0 +1,116 @@
+@page "/enrollments"
+@inject MediFlow.Blazor.Services.EnrollmentApiClient EnrollmentApi
+
+<PageTitle>Applications · MediFlow</PageTitle>
+
+<h1 class="page-title">Enrollment applications</h1>
+<p class="page-subtitle">Verification queue — approve or deny pending SEP applications; transitions are guarded by the state machine.</p>
+
+<div class="filter-bar">
+    <button type="button" class="chip" class:active="@(_status is null)" @onclick="() => Filter(null)">All</button>
+    @foreach (var status in FilterableStatuses)
+    {
+        <button type="button" class="chip" class:active="@(_status == status)"
+                @onclick="() => Filter(status)">@((EnrollmentStatus)status!)</button>
+    }
+</div>
+
+@if (_rows is null)
+{
+    <div class="loading">Loading applications…</div>
+}
+else if (_rows.Count == 0)
+{
+    <div class="empty">No applications in this state.</div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Application</th>
+                <th>Member</th>
+                <th>Plan</th>
+                <th>Effective</th>
+                <th>Status</th>
+                <th>SEP</th>
+                <th>Decision</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows)
+            {
+                <tr>
+                    <td class="mono">@row.ApplicationNumber</td>
+                    <td>@row.MemberName <span class="mono dim">@row.Mbi</span></td>
+                    <td><span class="mono">@row.PlanCode</span></td>
+                    <td>@row.RequestedEffectiveDate.ToString("yyyy-MM-dd")</td>
+                    <td><StatusBadge Kind="enrollment" Value="row.Status" /></td>
+                    <td>@SepLabel(row.SepReason)</td>
+                    <td>
+                        @if (row.Status is 1 or 2)
+                        {
+                            <span class="actions">
+                                <button type="button" class="btn btn-primary btn-sm" @onclick="() => Decide(row, true)">Approve</button>
+                                <button type="button" class="btn btn-danger btn-sm" @onclick="() => Decide(row, false)">Deny</button>
+                            </span>
+                        }
+                        else if (row.DecisionNote is not null)
+                        {
+                            <span class="dim" title="@row.DecisionNote">@Truncate(row.DecisionNote, 32)</span>
+                        }
+                        else
+                        {
+                            <span class="dim">—</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private static readonly int[] FilterableStatuses = [1, 2, 3, 4, 5];
+
+    private int? _status = 2; // default to the verification queue
+    private List<EnrollmentDto>? _rows;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _rows = await EnrollmentApi.GetEnrollmentsAsync(_status);
+    }
+
+    private async Task Filter(int? status)
+    {
+        _status = status;
+        await Load();
+    }
+
+    private async Task Decide(EnrollmentDto row, bool approve)
+    {
+        var note = approve
+            ? "SEP documentation verified by staff"
+            : "SEP documentation not provided";
+        var result = await EnrollmentApi.DecideAsync(row.Id, approve, note);
+        if (result is not null)
+        {
+            await Load();
+        }
+    }
+
+    private static string SepLabel(int sep) => sep switch
+    {
+        0 => "—",
+        1 => "Moved",
+        2 => "Lost coverage",
+        3 => "Dual eligible",
+        4 => "LIS",
+        5 => "5-star switch",
+        _ => sep.ToString(),
+    };
+
+    private static string Truncate(string value, int max) => value.Length <= max ? value : value[..max] + "…";
+}

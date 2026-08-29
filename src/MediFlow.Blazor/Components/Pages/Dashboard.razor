@@ -1,0 +1,127 @@
+@page "/"
+@inject ClaimsApiClient ClaimsApi
+@inject MediFlow.Blazor.Services.ClaimsApiClient ClaimsApi
+@inject MediFlow.Blazor.Services.EnrollmentApiClient EnrollmentApi
+
+<PageTitle>Dashboard · MediFlow</PageTitle>
+
+<h1 class="page-title">Operations dashboard</h1>
+<p class="page-subtitle">Live KPIs from the enrollment and claims pipelines. Figures refresh on reload.</p>
+
+@if (_stats is null)
+{
+    <div class="loading">Loading dashboard…</div>
+}
+else
+{
+    <div class="tile-grid">
+        <div class="tile">
+            <div class="tile-label">Open claims</div>
+            <div class="tile-value">@_stats.ClaimsOpen</div>
+            <div class="tile-foot">@($"{_stats.ClaimsReceived} received · {_stats.ClaimsAdjudicating} in flight")</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Adjudicated 30d</div>
+            <div class="tile-value">@(_stats.ClaimsPaid30d + _stats.ClaimsDenied30d)</div>
+            <div class="tile-foot">@($"{_stats.ClaimsPaid30d} paid · {_stats.ClaimsDenied30d} denied")</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">YTD plan paid</div>
+            <div class="tile-value">@Money.Format((int)_stats.YtdPlanPaidCents)</div>
+            <div class="tile-foot">@($"member share {Money.Format((int)_stats.YtdMemberOwesCents)}")</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Active enrollments</div>
+            <div class="tile-value">@_stats.EnrollmentsActive</div>
+            <div class="tile-foot">@($"{_stats.EnrollmentsPending} applications pending")</div>
+        </div>
+    </div>
+
+    <div class="card-grid two-col">
+        <section class="card">
+            <h2 class="card-title">Denial mix @DateTime.UtcNow.Year</h2>
+            @if (_denialRollup is not { Count: > 0 })
+            {
+                <div class="empty">No denials recorded for this year.</div>
+            }
+            else
+            {
+                <div class="denial-chart">
+                    @foreach (var row in _denialRollup!.Take(6))
+                    {
+                        var pct = Math.Min(100, (int)(row.ClaimCount * 100.0 / _denialRollup![0].ClaimCount));
+                        <div class="denial-row">
+                            <span class="denial-label">@DescribeCode(row.DenialCode)</span>
+                            <span class="denial-bar"><span class="denial-fill" style="width:@(pct)%"></span></span>
+                            <span class="denial-count">@row.ClaimCount</span>
+                        </div>
+                    }
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Plan portfolio @DateTime.UtcNow.Year</h2>
+            @if (_planSummary is not { Count: > 0 })
+            {
+                <div class="empty">No plan data.</div>
+            }
+            else
+            {
+                <table class="table compact">
+                    <thead>
+                        <tr>
+                            <th>Plan</th>
+                            <th>Type</th>
+                            <th class="num">Active</th>
+                            <th class="num">Monthly premium</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var plan in _planSummary!.Take(8))
+                        {
+                            <tr>
+                                <td>
+                                    <span class="mono">@plan.PlanCode</span> @plan.Name
+                                    @if (plan.IsFiveStar)
+                                    {
+                                        <span class="star" title="CMS five-star plan">★</span>
+                                    }
+                                </td>
+                                <td>@(plan.Type == 1 ? "MA" : "PDP")</td>
+                                <td class="num">@plan.ActiveCount</td>
+                                <td class="num">@Money.Format((int)plan.MonthlyPremiumCentsTotal)</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    private DashboardStatsDto? _stats;
+    private List<DenialRollupDto>? _denialRollup;
+    private List<PlanEnrollmentSummaryDto>? _planSummary;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var year = DateTime.UtcNow.Year;
+        _stats = await ClaimsApi.GetDashboardStatsAsync();
+        _denialRollup = await ClaimsApi.GetDenialRollupAsync(year);
+        _planSummary = await EnrollmentApi.GetPlanEnrollmentSummaryAsync(year);
+    }
+
+    private static string DescribeCode(int denialCode) => denialCode switch
+    {
+        181 => "CO-18 duplicate",
+        271 => "CO-27 coverage ended",
+        291 => "CO-29 late filing",
+        961 => "CO-96 non-covered",
+        12 => "PR-1 deductible",
+        22 => "PR-2 coinsurance",
+        32 => "PR-3 copay",
+        _ => $"code {denialCode}",
+    };
+}

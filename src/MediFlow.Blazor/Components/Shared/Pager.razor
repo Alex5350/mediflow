@@ -1,0 +1,19 @@
+@* Pager for server-side paged results (proc-backed lists). *@
+<div class="pager">
+    <span class="pager-info">@TotalItems result@(TotalItems == 1 ? string.Empty : "s") · page @PageIndex of @Math.Max(1, TotalPages)</span>
+    <div class="pager-actions">
+        <button type="button" class="btn btn-secondary btn-sm" disabled="@(PageIndex <= 1)"
+                @onclick="() => Go.InvokeAsync(PageIndex - 1)">‹ Prev</button>
+        <button type="button" class="btn btn-secondary btn-sm" disabled="@(PageIndex >= TotalPages)"
+                @onclick="() => Go.InvokeAsync(PageIndex + 1)">Next ›</button>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public int PageIndex { get; set; }
+    [Parameter, EditorRequired] public int TotalItems { get; set; }
+    [Parameter, EditorRequired] public int PageSize { get; set; }
+    [Parameter, EditorRequired] public EventCallback<int> Go { get; set; }
+
+    private int TotalPages => (int)Math.Ceiling(TotalItems / (double)Math.Max(1, PageSize));
+}

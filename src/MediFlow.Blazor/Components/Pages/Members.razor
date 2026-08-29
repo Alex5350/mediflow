@@ -1,0 +1,86 @@
+@page "/members"
+@inject NavigationManager Navigation
+@inject MediFlow.Blazor.Services.EnrollmentApiClient EnrollmentApi
+
+<PageTitle>Members · MediFlow</PageTitle>
+
+<h1 class="page-title">Members</h1>
+<p class="page-subtitle">Search by MBI or name prefix. Results come from <code>usp_SearchMembers</code> server-side paging.</p>
+
+<div class="search-bar">
+    <input class="input" type="search" placeholder="MBI or last/first name (e.g. 60KJY or Abernathy)"
+           value="@_query" @oninput="OnQueryChanged" @onkeydown="OnKeyDown" />
+    <button type="button" class="btn btn-primary" @onclick="Search">Search</button>
+</div>
+
+@if (_results is null)
+{
+    <div class="loading">Enter a search to look up members.</div>
+}
+else if (_results.Items.Count == 0)
+{
+    <div class="empty">No members matched “@_query”.</div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>MBI</th>
+                <th>Name</th>
+                <th>Date of birth</th>
+                <th>State</th>
+                <th>Part B effective</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var member in _results.Items)
+            {
+                <tr>
+                    <td class="mono">@FormatMbi(member.Mbi)</td>
+                    <td>@($"{member.LastName}, {member.FirstName}")</td>
+                    <td>@member.DateOfBirth.ToString("yyyy-MM-dd")</td>
+                    <td>@member.StateCode</td>
+                    <td>@(member.PartBEffective?.ToString("yyyy-MM-dd") ?? "—")</td>
+                    <td><a class="link" href="@($"members/{member.Id}")">Open 360 →</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <Pager PageIndex="_page" TotalItems="_results.Total" PageSize="PageSize" Go="OnPage" />
+}
+
+@code {
+    private string _query = string.Empty;
+    private int _page = 1;
+    private const int PageSize = 15;
+    private PagedResult<MemberSearchResultDto>? _results;
+
+    private void OnQueryChanged(ChangeEventArgs e) => _query = e.Value?.ToString() ?? string.Empty;
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            Search();
+        }
+    }
+
+    private Task Search() => RunSearch(1);
+
+    private Task OnPage(int page) => RunSearch(page);
+
+    private async Task RunSearch(int page)
+    {
+        if (string.IsNullOrWhiteSpace(_query))
+        {
+            return;
+        }
+
+        _page = page;
+        _results = await EnrollmentApi.SearchMembersAsync(_query, page, PageSize);
+    }
+
+    private static string FormatMbi(string mbi) => $"{mbi[..4]}-{mbi[4..7]}-{mbi[7..]}";
+}

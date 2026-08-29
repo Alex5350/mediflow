@@ -1,0 +1,205 @@
+@page "/claims/{ClaimId:int}"
+@inject MediFlow.Blazor.Services.ClaimsApiClient ClaimsApi
+@implements IDisposable
+
+<PageTitle>Claim detail · MediFlow</PageTitle>
+
+@if (_claim is null)
+{
+    if (_loaded)
+    {
+        <div class="empty">Claim not found.</div>
+    }
+    else
+    {
+        <div class="loading">Loading claim…</div>
+    }
+}
+else
+{
+    <h1 class="page-title mono">@_claim.ClaimNumber <StatusBadge Kind="claim" Value="_claim.Status" /></h1>
+    <p class="page-subtitle">
+        <a class="link" href="@($"members/{_claim.MemberId}")">@_claim.MemberName</a>
+        <span class="mono dim">@_claim.Mbi</span> · plan <span class="mono">@_claim.PlanCode</span> ·
+        NPI <span class="mono">@_claim.RenderingProviderNpi</span> ·
+        service @_claim.ServiceDate.ToString("yyyy-MM-dd") · @_claim.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture) UTC
+    </p>
+
+    @if (IsOpen)
+    {
+        <div class="alert alert-info">
+            Claim is in the adjudication pipeline — this page refreshes every 3 seconds while the worker processes it.
+        </div>
+    }
+
+    <div class="card-grid two-col">
+        <section class="card">
+            <h2 class="card-title">Line-level remittance</h2>
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Code</th>
+                        <th class="num">Charged</th>
+                        <th class="num">Allowed</th>
+                        <th class="num">Plan pays</th>
+                        <th class="num">Member owes</th>
+                        <th>Adjustment</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var line in _claim.Lines)
+                    {
+                        <tr>
+                            <td>@line.Sequence</td>
+                            <td class="mono">@line.ProcedureCode</td>
+                            <td class="num">@Money.Format(line.ChargeCents)</td>
+                            <td class="num">@(line.AllowedCents is { } allowed ? Money.Format(allowed) : "—")</td>
+                            <td class="num">@(line.PlanPaidCents is { } plan ? Money.Format(plan) : "—")</td>
+                            <td class="num">@(line.MemberOwesCents is { } member ? Money.Format(member) : "—")</td>
+                            <td>@(line.DenialCode is { } code ? DenialCodeDescriptions.Describe((DenialCode)code) : "—")</td>
+                        </tr>
+                    }
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="2"><strong>Totals</strong></td>
+                        <td class="num">@Money.Format(_claim.TotalChargeCents)</td>
+                        <td class="num">@Optional(_claim.TotalAllowedCents)</td>
+                        <td class="num">@Optional(_claim.TotalPlanPaidCents)</td>
+                        <td class="num">@Optional(_claim.TotalMemberOwesCents)</td>
+                        <td></td>
+                    </tr>
+                </tfoot>
+            </table>
+
+            @if (_claim.DenialCode is { } claimDenial)
+            {
+                <div class="alert alert-error">
+                    Claim-level denial: @DenialCodeDescriptions.Describe((DenialCode)claimDenial)
+                </div>
+            }
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Adjudication audit trail</h2>
+            <ol class="timeline">
+                @foreach (var entry in _claim.Audit)
+                {
+                    <li>
+                        <span class="timeline-action">@entry.Action</span>
+                        <span class="timeline-actor">by @entry.Actor</span>
+                        <span class="timeline-time">@entry.AtUtc.ToString("yyyy-MM-dd HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture) UTC</span>
+                        @if (entry.DetailJson is not null)
+                        {
+                            <code class="timeline-detail">@entry.DetailJson</code>
+                        }
+                    </li>
+                }
+            </ol>
+
+            <h2 class="card-title spaced">Actions</h2>
+            <div class="form-actions">
+                @if (_claim.Status is 0 or 1)
+                {
+                    <button type="button" class="btn btn-secondary" @onclick="Pend">Pend for review</button>
+                }
+                @if (_claim.Status is 5)
+                {
+                    <button type="button" class="btn btn-primary" @onclick="Requeue">Re-queue for adjudication</button>
+                }
+                @if (_claim.Status is 0 or 1)
+                {
+                    <button type="button" class="btn btn-secondary" @onclick="PreviewAdjudication">Preview adjudication (dry run)</button>
+                }
+            </div>
+
+            @if (_preview is not null)
+            {
+                <div class="preview">
+                    <strong>Dry-run decision:</strong> @(_preview.Status) ·
+                    plan pays @Money.Format(_preview.TotalPlanPaidCents) ·
+                    member owes @Money.Format(_preview.TotalMemberOwesCents)
+                    <table class="table compact">
+                        <tbody>
+                            @foreach (var line in _preview.Lines)
+                            {
+                                <tr>
+                                    <td class="mono">@line.ProcedureCode</td>
+                                    <td class="num">@Money.Format(line.ChargeCents)</td>
+                                    <td class="num">→ allowed @Money.Format(line.AllowedCents)</td>
+                                    <td class="num">plan @Money.Format(line.PlanPaidCents)</td>
+                                    <td class="num">member @Money.Format(line.MemberOwesCents)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public int ClaimId { get; set; }
+
+    private ClaimDetailDto? _claim;
+    private AdjudicationPreviewDto? _preview;
+    private bool _loaded;
+    private System.Threading.Timer? _pollTimer;
+
+    private bool IsOpen => _claim?.Status is 0 or 1;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _claim = await ClaimsApi.GetClaimAsync(ClaimId);
+        _loaded = true;
+
+        if (IsOpen)
+        {
+            _pollTimer = new System.Threading.Timer(async _ => await PollAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+        }
+    }
+
+    private async Task PollAsync()
+    {
+        var refreshed = await ClaimsApi.GetClaimAsync(ClaimId);
+        if (refreshed is not null)
+        {
+            _claim = refreshed;
+            await InvokeAsync(StateHasChanged);
+            if (!IsOpen)
+            {
+                _pollTimer?.Dispose();
+                _pollTimer = null;
+            }
+        }
+    }
+
+    private async Task Pend()
+    {
+        if (await ClaimsApi.PendAsync(ClaimId, "Pended from claim detail for provider verification"))
+        {
+            _claim = await ClaimsApi.GetClaimAsync(ClaimId);
+        }
+    }
+
+    private async Task Requeue()
+    {
+        if (await ClaimsApi.QueueAdjudicationAsync(ClaimId))
+        {
+            _preview = null;
+            _pollTimer = new System.Threading.Timer(async _ => await PollAsync(), null, TimeSpan.FromSeconds(3), TimeSpan.FromSeconds(3));
+            _claim = await ClaimsApi.GetClaimAsync(ClaimId);
+        }
+    }
+
+    private async Task PreviewAdjudication()
+    {
+        _preview = await ClaimsApi.PreviewAsync(ClaimId);
+    }
+
+    private static string Optional(int? cents) => cents is { } value ? Money.Format(value) : "—";
+
+    public void Dispose() => _pollTimer?.Dispose();
+}
