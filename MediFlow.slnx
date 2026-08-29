@@ -1,0 +1,17 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MediFlow.Api/MediFlow.Api.csproj" />
+    <Project Path="src/MediFlow.Blazor/MediFlow.Blazor.csproj" />
+    <Project Path="src/MediFlow.Claims.Api/MediFlow.Claims.Api.csproj" />
+    <Project Path="src/MediFlow.Contracts/MediFlow.Contracts.csproj" />
+    <Project Path="src/MediFlow.Domain/MediFlow.Domain.csproj" />
+    <Project Path="src/MediFlow.Infrastructure/MediFlow.Infrastructure.csproj" />
+    <Project Path="src/MediFlow.Mcp/MediFlow.Mcp.csproj" />
+    <Project Path="src/MediFlow.Worker/MediFlow.Worker.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MediFlow.Blazor.UnitTests/MediFlow.Blazor.UnitTests.csproj" />
+    <Project Path="tests/MediFlow.Domain.UnitTests/MediFlow.Domain.UnitTests.csproj" />
+    <Project Path="tests/MediFlow.IntegrationTests/MediFlow.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
