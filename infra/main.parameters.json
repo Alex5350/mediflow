@@ -1,0 +1,12 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentParameters.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "nameSuffix": { "value": "mediflow" },
+    "sqlAdminLogin": { "value": "mediflow_admin" },
+    "imagePrefix": { "value": "ghcr.io/alex5350/mediflow" },
+    "imageTag": { "value": "latest" },
+    "sqlAdminPassword": { "reference": { "keyVault": { "id": "/subscriptions/SUBSCRIPTION_ID/resourceGroups/RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/VAULT_NAME" }, "secretName": "sql-admin-password" } },
+    "apiKeys": { "reference": { "keyVault": { "id": "/subscriptions/SUBSCRIPTION_ID/resourceGroups/RESOURCE_GROUP/providers/Microsoft.KeyVault/vaults/VAULT_NAME" }, "secretName": "api-keys" } }
+  }
+}

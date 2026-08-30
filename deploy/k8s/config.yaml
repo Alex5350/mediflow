@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mediflow-config
+  namespace: mediflow
+data:
+  ASPNETCORE_URLS: http://+:8080
+  Api__EnrollmentBaseUrl: http://mediflow-api:8080
+  Api__ClaimsBaseUrl: http://mediflow-claims-api:8080
+  Database__InitializeOnStartup: "false"   # the api deployment owns bootstrap
+---
+# Demo key for non-production clusters only — wire ExternalSecrets/CSI for real ones.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: mediflow-secrets
+  namespace: mediflow
+type: Opaque
+stringData:
+  ConnectionStrings__MediFlowDb: "SERVER_PLACEHOLDER;Database=MediFlow;User ID=PLACEHOLDER;Password=PLACEHOLDER;TrustServerCertificate=True;Encrypt=True"
+  Api__Keys: "replace-me"
+  Api__Key: "replace-me"
