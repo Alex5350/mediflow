@@ -1,0 +1,97 @@
+@page "/claims"
+@inject MediFlow.Blazor.Services.ClaimsApiClient ClaimsApi
+
+<PageTitle>Claims queue · MediFlow</PageTitle>
+
+<h1 class="page-title">Claims queue</h1>
+<p class="page-subtitle">Server-side paged queue backed by <code>usp_ClaimsQueue</code>. Filters map straight to indexed status columns.</p>
+
+<div class="filter-bar">
+    <button type="button" class="chip" class:active="@(_statuses is null)" @onclick="() => Filter(null)">All</button>
+    @foreach (var filter in Filters)
+    {
+        <button type="button" class="chip" class:active="@(_statuses == filter.Value)"
+                @onclick="() => Filter(filter.Value)">@filter.Label</button>
+    }
+</div>
+
+@if (_rows is null)
+{
+    <div class="loading">Loading queue…</div>
+}
+else if (_rows.Items.Count == 0)
+{
+    <div class="empty">Queue is empty for this filter.</div>
+}
+else
+{
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Claim</th>
+                <th>Member</th>
+                <th>Service date</th>
+                <th class="num">Charged</th>
+                <th class="num">Plan paid</th>
+                <th>Status</th>
+                <th>Attempts</th>
+                <th></th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var row in _rows.Items)
+            {
+                <tr>
+                    <td><a class="link mono" href="@($"claims/{row.Id}")">@row.ClaimNumber</a></td>
+                    <td>@row.LastName, @row.FirstName <span class="mono dim">@row.Mbi</span></td>
+                    <td>@row.ServiceDate.ToString("yyyy-MM-dd")</td>
+                    <td class="num">@Money.Format(row.TotalChargeCents)</td>
+                    <td class="num">@(row.TotalPlanPaidCents is { } paid ? Money.Format(paid) : "—")</td>
+                    <td><StatusBadge Kind="claim" Value="row.Status" /></td>
+                    <td>@(row.Attempts == 0 ? "—" : row.Attempts)</td>
+                    <td><a class="link" href="@($"claims/{row.Id}")">Detail →</a></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <Pager PageIndex="_page" TotalItems="_rows.Total" PageSize="PageSize" Go="OnPage" />
+}
+
+@code {
+    private sealed record QueueFilter(string Label, string Value);
+
+    private static readonly QueueFilter[] Filters =
+    [
+        new("Open", "Received,Adjudicating"),
+        new("Received", "Received"),
+        new("Paid", "Paid"),
+        new("Denied", "Denied"),
+        new("Pended", "Pended"),
+        new("Dead-lettered", "DeadLettered"),
+    ];
+
+    private string? _statuses = "Received,Adjudicating";
+    private int _page = 1;
+    private const int PageSize = 15;
+    private PagedResult<ClaimQueueItemDto>? _rows;
+
+    protected override async Task OnInitializedAsync() => await Load();
+
+    private async Task Load()
+    {
+        _rows = await ClaimsApi.GetQueueAsync(_statuses, _page, PageSize);
+    }
+
+    private async Task Filter(string? statuses)
+    {
+        _statuses = statuses;
+        _page = 1;
+        await Load();
+    }
+
+    private async Task OnPage(int page)
+    {
+        _page = page;
+        await Load();
+    }
+}

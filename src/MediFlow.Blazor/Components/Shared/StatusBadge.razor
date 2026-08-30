@@ -1,0 +1,23 @@
+@* Text-based status badge shared by every list/detail view. *@
+<span class="badge badge-@BadgeClass">@Label</span>
+
+@code {
+    [Parameter, EditorRequired]
+    public string Kind { get; set; } = "claim";
+
+    [Parameter, EditorRequired]
+    public int Value { get; set; }
+
+    private string Label => Kind == "claim"
+        ? ((ClaimStatus)Value).ToString()
+        : Kind == "enrollment"
+            ? ((EnrollmentStatus)Value).ToString()
+            : Value.ToString();
+
+    private string BadgeClass => Kind switch
+    {
+        "claim" => ((ClaimStatus)Value).ToString().ToLowerInvariant(),
+        "enrollment" => ((EnrollmentStatus)Value).ToString().ToLowerInvariant(),
+        _ => "neutral",
+    };
+}

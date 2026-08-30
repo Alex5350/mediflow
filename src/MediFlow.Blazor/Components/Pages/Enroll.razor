@@ -1,0 +1,202 @@
+@page "/enroll"
+@inject MediFlow.Blazor.Services.EnrollmentApiClient EnrollmentApi
+
+<PageTitle>New enrollment · MediFlow</PageTitle>
+
+<h1 class="page-title">New enrollment application</h1>
+<p class="page-subtitle">
+    Eligibility is evaluated by the same rules the API uses (AEP/ICEP/SEP windows,
+    Part B entitlement, dual-coverage protection) before anything is saved.
+</p>
+
+<ol class="wizard-steps">
+    <li class="@StepClass(1)">1 · Member</li>
+    <li class="@StepClass(2)">2 · Plan</li>
+    <li class="@StepClass(3)">3 · Effective date</li>
+</ol>
+
+@if (_step == 1)
+{
+    <section class="card">
+        <h2 class="card-title">Find the member</h2>
+        <div class="search-bar">
+            <input class="input" type="search" placeholder="MBI or name prefix" value="@_memberQuery"
+                   @oninput="(e) => _memberQuery = e.Value?.ToString() ?? string.Empty" />
+            <button type="button" class="btn btn-primary" @onclick="SearchMembers">Search</button>
+        </div>
+        @if (_memberResults is { Count: > 0 })
+        {
+            <table class="table compact">
+                <thead>
+                    <tr><th>MBI</th><th>Name</th><th>State</th><th>Part B</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var m in _memberResults)
+                    {
+                        <tr>
+                            <td class="mono">@m.Mbi</td>
+                            <td>@($"{m.LastName}, {m.FirstName}")</td>
+                            <td>@m.StateCode</td>
+                            <td>@(m.PartBEffective?.ToString("yyyy-MM-dd") ?? "not entitled")</td>
+                            <td><button type="button" class="btn btn-secondary btn-sm" @onclick="() => ChooseMember(m)">Select</button></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+}
+else if (_step == 2)
+{
+    <section class="card">
+        <h2 class="card-title">Choose a 2026 plan</h2>
+        <div class="chosen">@_chosenMember!.LastName, @_chosenMember.FirstName · <span class="mono">@_chosenMember.Mbi</span>
+            <button type="button" class="btn btn-ghost btn-sm" @onclick="ResetMember">change</button></div>
+        <QuickGrid class="table compact" Items="_plans!.AsQueryable()" Pagination="_pagination">
+            <PropertyColumn Title="Code" Property="((PlanDto p) => p.PlanCode)" />
+            <PropertyColumn Title="Plan" Property="((PlanDto p) => p.Name)" />
+            <PropertyColumn Title="Type" Property="((PlanDto p) => TypeLabel(p.Type))" />
+            <PropertyColumn Title="Premium" Property="((PlanDto p) => Money.Format(p.MonthlyPremiumCents))" />
+            <PropertyColumn Title="Deductible" Property="((PlanDto p) => Money.Format(p.DeductibleCents))" />
+            <TemplateColumn Title="Coinsurance">
+                @($"{context.CoinsurancePercent}%")
+            </TemplateColumn>
+            <PropertyColumn Title="OOP max" Property="((PlanDto p) => Money.Format(p.OopMaxCents))" />
+            <TemplateColumn Title="">
+                <button type="button" class="btn btn-primary btn-sm" @onclick="() => ChoosePlan(context)">Select</button>
+            </TemplateColumn>
+        </QuickGrid>
+    </section>
+}
+else
+{
+    <section class="card">
+        <h2 class="card-title">Effective date &amp; SEP reason</h2>
+        <div class="chosen">
+            @_chosenMember!.LastName, @_chosenMember.FirstName → <span class="mono">@_chosenPlan!.PlanCode</span> @_chosenPlan.Name
+        </div>
+
+        <div class="form-grid">
+            <label>
+                Requested effective date
+                <input class="input" type="date" @bind="_effectiveDate" />
+            </label>
+            <label>
+                SEP reason (if outside AEP/ICEP)
+                <select class="input" @bind="_sepReason">
+                    <option value="0">None — AEP/ICEP applies</option>
+                    <option value="1">Moved (service area)</option>
+                    <option value="2">Lost creditable coverage</option>
+                    <option value="3">Dual eligible (Medicaid)</option>
+                    <option value="4">Low-income subsidy (LIS)</option>
+                    <option value="5">5-star switch</option>
+                </select>
+            </label>
+        </div>
+
+        @if (_violations is { Count: > 0 })
+        {
+            <div class="alert alert-error">
+                <strong>Eligibility violations — application rejected:</strong>
+                <ul>
+                    @foreach (var violation in _violations)
+                    {
+                        <li>@violation.Value.FirstOrDefault()</li>
+                    }
+                </ul>
+            </div>
+        }
+        @if (_submitted is not null)
+        {
+            <div class="alert alert-success">
+                Application <strong class="mono">@_submitted</strong> submitted and routed to verification.
+            </div>
+        }
+
+        <div class="form-actions">
+            <button type="button" class="btn btn-primary" disabled="@(_submitting)" @onclick="Submit">
+                @(_submitting ? "Submitting…" : "Submit application")
+            </button>
+            <button type="button" class="btn btn-secondary" @onclick="() => _step = 2">Back</button>
+        </div>
+    </section>
+}
+
+@code {
+    private int _step = 1;
+    private string _memberQuery = string.Empty;
+    private List<MemberSearchResultDto>? _memberResults;
+    private MemberSearchResultDto? _chosenMember;
+    private List<PlanDto>? _plans;
+    private PlanDto? _chosenPlan;
+    private DateOnly? _effectiveDate;
+    private int _sepReason;
+    private Dictionary<string, string[]>? _violations;
+    private string? _submitted;
+    private bool _submitting;
+
+    private PaginationState _pagination = new() { ItemsPerPage = 8 };
+
+    private string StepClass(int step) => step == _step ? "active" : step < _step ? "done" : "";
+
+    private async Task SearchMembers()
+    {
+        _memberResults = (await EnrollmentApi.SearchMembersAsync(_memberQuery, pageSize: 10))?.Items.ToList();
+    }
+
+    private void ChooseMember(MemberSearchResultDto member)
+    {
+        _chosenMember = member;
+        _step = 2;
+    }
+
+    private void ResetMember()
+    {
+        _chosenMember = null;
+        _step = 1;
+    }
+
+    private void ChoosePlan(PlanDto plan)
+    {
+        _chosenPlan = plan;
+        _step = 3;
+    }
+
+    private async Task Submit()
+    {
+        if (_chosenMember is null || _chosenPlan is null || _effectiveDate is not { } effective)
+        {
+            return;
+        }
+
+        _submitting = true;
+        _violations = null;
+        _submitted = null;
+
+        var outcome = await EnrollmentApi.SubmitEnrollmentAsync(new SubmitEnrollmentRequest
+        {
+            MemberId = _chosenMember.Id,
+            PlanId = _chosenPlan.Id,
+            RequestedEffectiveDate = effective,
+            SepReason = _sepReason,
+        });
+
+        if (outcome.Accepted)
+        {
+            _submitted = outcome.ApplicationNumber;
+        }
+        else
+        {
+            _violations = outcome.Violations;
+        }
+
+        _submitting = false;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _plans = await EnrollmentApi.GetPlansAsync(DateTime.UtcNow.Year);
+    }
+
+    private static string TypeLabel(int type) => type == 1 ? "MA" : "PDP";
+}

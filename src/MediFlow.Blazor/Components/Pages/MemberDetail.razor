@@ -1,0 +1,137 @@
+@page "/members/{MemberId:int}"
+@inject MediFlow.Blazor.Services.EnrollmentApiClient EnrollmentApi
+
+<PageTitle>Member 360 · MediFlow</PageTitle>
+
+@if (_view is null)
+{
+    if (_loaded)
+    {
+        <div class="empty">Member not found.</div>
+    }
+    else
+    {
+        <div class="loading">Loading member…</div>
+    }
+}
+else
+{
+    var h = _view.Header!;
+    <h1 class="page-title">@($"{h.LastName}, {h.FirstName}") <span class="mono page-code">@FormatMbi(h.Mbi)</span></h1>
+    <p class="page-subtitle">
+        DOB @h.DateOfBirth.ToString("yyyy-MM-dd") · @h.StateCode ·
+        Part B @(h.PartBEffective?.ToString("yyyy-MM-dd") ?? "not entitled")
+    </p>
+
+    <div class="card-grid two-col">
+        <section class="card">
+            <h2 class="card-title">Active coverage</h2>
+            @if (h.PlanCode is null)
+            {
+                <div class="empty">No active coverage on file.</div>
+            }
+            else
+            {
+                <dl class="kv">
+                    <dt>Plan</dt>
+                    <dd><span class="mono">@h.PlanCode</span> @h.PlanName</dd>
+                    <dt>Plan type</dt>
+                    <dd>@(h.PlanType == 1 ? "Medicare Advantage" : "Prescription Drug")</dd>
+                    <dt>Application</dt>
+                    <dd class="mono">@h.ApplicationNumber</dd>
+                    <dt>Effective</dt>
+                    <dd>@h.RequestedEffectiveDate?.ToString("yyyy-MM-dd")</dd>
+                </dl>
+            }
+
+            <h2 class="card-title spaced">Enrollment history</h2>
+            <table class="table compact">
+                <thead>
+                    <tr>
+                        <th>Application</th>
+                        <th>Plan</th>
+                        <th>Effective</th>
+                        <th>Status</th>
+                        <th>SEP</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var enrollment in _view.Enrollments)
+                    {
+                        <tr>
+                            <td class="mono">@enrollment.ApplicationNumber</td>
+                            <td><span class="mono">@enrollment.PlanCode</span></td>
+                            <td>@enrollment.RequestedEffectiveDate.ToString("yyyy-MM-dd")</td>
+                            <td><StatusBadge Kind="enrollment" Value="enrollment.Status" /></td>
+                            <td>@SepLabel(enrollment.SepReason)</td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2 class="card-title">Claims (latest 25)</h2>
+            @if (_view.Claims.Count == 0)
+            {
+                <div class="empty">No claims on file.</div>
+            }
+            else
+            {
+                <table class="table compact">
+                    <thead>
+                        <tr>
+                            <th>Claim</th>
+                            <th>Service date</th>
+                            <th class="num">Charged</th>
+                            <th class="num">Plan paid</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var claim in _view.Claims)
+                        {
+                            <tr>
+                                <td><a class="link mono" href="@($"claims/{claim.Id}")">@claim.ClaimNumber</a></td>
+                                <td>@claim.ServiceDate.ToString("yyyy-MM-dd")</td>
+                                <td class="num">@Money.Format(claim.TotalChargeCents)</td>
+                                <td class="num">@(claim.TotalPlanPaidCents is { } paid ? Money.Format(paid) : "—")</td>
+                                <td><StatusBadge Kind="claim" Value="claim.Status" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+                <div class="kpi-inline">
+                    YTD plan paid <strong>@Money.Format(_view.Claims.Count > 0 ? _view.Claims[0].YtdPlanPaidCents : 0)</strong>
+                    · member share <strong>@Money.Format(_view.Claims.Count > 0 ? _view.Claims[0].YtdMemberOwesCents : 0)</strong>
+                </div>
+            }
+        </section>
+    </div>
+}
+
+@code {
+    [Parameter] public int MemberId { get; set; }
+
+    private Member360Dto? _view;
+    private bool _loaded;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _view = await EnrollmentApi.GetMember360Async(MemberId);
+        _loaded = true;
+    }
+
+    private static string FormatMbi(string mbi) => $"{mbi[..4]}-{mbi[4..7]}-{mbi[7..]}";
+
+    private static string SepLabel(int sep) => sep switch
+    {
+        0 => "—",
+        1 => "Moved",
+        2 => "Lost coverage",
+        3 => "Dual eligible",
+        4 => "LIS",
+        5 => "5-star switch",
+        _ => sep.ToString(),
+    };
+}

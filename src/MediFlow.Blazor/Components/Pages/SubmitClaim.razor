@@ -1,0 +1,137 @@
+@page "/claims/submit"
+@inject MediFlow.Blazor.Services.ClaimsApiClient ClaimsApi
+
+<PageTitle>Submit claim · MediFlow</PageTitle>
+
+<h1 class="page-title">Submit claim</h1>
+<p class="page-subtitle">
+    Intake runs NPI check-digit validation, service-date and line checks before the claim
+    enters the durable outbox; the worker adjudicates it within seconds.
+</p>
+
+<section class="card">
+    <div class="form-grid">
+        <label>
+            Member id
+            <input class="input" type="number" @bind="_memberId" />
+        </label>
+        <label>
+            Plan id
+            <input class="input" type="number" @bind="_planId" />
+        </label>
+        <label>
+            Rendering provider NPI
+            <input class="input mono" placeholder="10-digit NPI" value="@_npi" @oninput="(e) => _npi = e.Value?.ToString() ?? string.Empty" />
+        </label>
+        <label>
+            Service date
+            <input class="input" type="date" @bind="_serviceDate" />
+        </label>
+    </div>
+
+    <h2 class="card-title spaced">Service lines</h2>
+    <table class="table compact">
+        <thead>
+            <tr><th>#</th><th>CPT / HCPCS</th><th>Charge (dollars)</th><th></th></tr>
+        </thead>
+        <tbody>
+            @{ var index = 0; }
+            @foreach (var line in _lines)
+            {
+                var localIndex = ++index;
+                <tr>
+                    <td>@localIndex</td>
+                    <td><input class="input mono" style="max-width:9rem" value="@line.Code"
+                               @oninput="(e) => line.Code = e.Value?.ToString() ?? string.Empty" /></td>
+                    <td><input class="input" style="max-width:9rem" type="number" step="0.01" min="0" value="@line.Dollars"
+                               @oninput="(e) => line.Dollars = e.Value?.ToString() ?? string.Empty" /></td>
+                    <td><button type="button" class="btn btn-ghost btn-sm" @onclick="() => _lines.Remove(line)">remove</button></td>
+                </tr>
+            }
+        </tbody>
+    </table>
+    <button type="button" class="btn btn-secondary btn-sm" @onclick="AddLine">+ Add line</button>
+
+    @if (_violations is { Count: > 0 })
+    {
+        <div class="alert alert-error">
+            <strong>Intake validation failed:</strong>
+            <ul>
+                @foreach (var violation in _violations.SelectMany(v => v.Value))
+                {
+                    <li>@violation</li>
+                }
+            </ul>
+        </div>
+    }
+    @if (_submitted is not null)
+    {
+        <div class="alert alert-success">
+            Claim <strong class="mono">@_submitted</strong> accepted into the queue —
+            <a class="link" href="@ClaimHref">open detail</a> to watch it adjudicate.
+        </div>
+    }
+
+    <div class="form-actions">
+        <button type="button" class="btn btn-primary" disabled="@_submitting" @onclick="Submit">
+            @(_submitting ? "Submitting…" : "Submit claim")
+        </button>
+    </div>
+</section>
+
+@code {
+    private sealed class LineModel
+    {
+        public string Code { get; set; } = "99213";
+        public string Dollars { get; set; } = "150.00";
+    }
+
+    private int _memberId;
+    private int _planId;
+    private string _npi = string.Empty;
+    private DateOnly? _serviceDate;
+    private List<LineModel> _lines = [new()];
+    private Dictionary<string, string[]>? _violations;
+    private string? _submitted;
+    private int? _submittedId;
+    private bool _submitting;
+
+    private string ClaimHref => $"claims/{_submittedId}";
+
+    private void AddLine() => _lines.Add(new LineModel());
+
+    private async Task Submit()
+    {
+        _submitting = true;
+        _violations = null;
+        _submitted = null;
+
+        var outcome = await ClaimsApi.SubmitClaimAsync(new SubmitClaimRequest
+        {
+            MemberId = _memberId,
+            PlanId = _planId,
+            RenderingProviderNpi = _npi,
+            Type = 0,
+            ServiceDate = _serviceDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+            Lines = [.. _lines
+                .Where(l => !string.IsNullOrWhiteSpace(l.Code))
+                .Select(l => new SubmitClaimLine
+                {
+                    ProcedureCode = l.Code.Trim(),
+                    ChargeCents = (int)Math.Round(decimal.TryParse(l.Dollars, out var dollars) ? dollars * 100 : 0, MidpointRounding.AwayFromZero),
+                })],
+        });
+
+        if (outcome.Accepted)
+        {
+            _submitted = outcome.ClaimNumber;
+            _submittedId = outcome.ClaimId;
+        }
+        else
+        {
+            _violations = outcome.Violations;
+        }
+
+        _submitting = false;
+    }
+}

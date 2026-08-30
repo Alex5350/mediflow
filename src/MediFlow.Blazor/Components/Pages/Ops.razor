@@ -1,0 +1,85 @@
+@page "/ops"
+@inject MediFlow.Blazor.Services.ClaimsApiClient ClaimsApi
+
+<PageTitle>Operations · MediFlow</PageTitle>
+
+<h1 class="page-title">Operations</h1>
+<p class="page-subtitle">Pipeline health: queue depth, dead letters and outbox state. Backs onto <code>usp_GetDashboardStats</code> and the claims queue.</p>
+
+@if (_stats is null)
+{
+    <div class="loading">Loading operations data…</div>
+}
+else
+{
+    <div class="tile-grid">
+        <div class="tile">
+            <div class="tile-label">Outbox depth</div>
+            <div class="tile-value">@_stats.OutboxDepth</div>
+            <div class="tile-foot">pending adjudicate-claim messages</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">In flight</div>
+            <div class="tile-value">@_stats.ClaimsAdjudicating</div>
+            <div class="tile-foot">claims leased by workers</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Dead letters</div>
+            <div class="tile-value danger">@_stats.ClaimsDeadLettered</div>
+            <div class="tile-foot">claims needing operator review</div>
+        </div>
+        <div class="tile">
+            <div class="tile-label">Open</div>
+            <div class="tile-value">@_stats.ClaimsOpen</div>
+            <div class="tile-foot">received + adjudicating</div>
+        </div>
+    </div>
+
+    <section class="card">
+        <h2 class="card-title">Dead-lettered claims</h2>
+        @if (_deadLetters is null || _deadLetters.Items.Count == 0)
+        {
+            <div class="empty">No dead letters — the queue is healthy.</div>
+        }
+        else
+        {
+            <table class="table compact">
+                <thead>
+                    <tr><th>Claim</th><th>Member</th><th>Attempts</th><th>Received</th><th></th></tr>
+                </thead>
+                <tbody>
+                    @foreach (var row in _deadLetters.Items)
+                    {
+                        <tr>
+                            <td><a class="link mono" href="@($"claims/{row.Id}")">@row.ClaimNumber</a></td>
+                            <td>@row.LastName, @row.FirstName</td>
+                            <td>@row.Attempts</td>
+                            <td>@row.ReceivedAtUtc.ToString("yyyy-MM-dd HH:mm", System.Globalization.CultureInfo.InvariantCulture)</td>
+                            <td><a class="link" href="@($"claims/{row.Id}")">Re-queue from detail →</a></td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        }
+    </section>
+
+    <section class="card">
+        <h2 class="card-title">Runbook pointers</h2>
+        <ul class="runbook-list">
+            <li>Worker stalls → check lease expiry (<code>usp_LeaseNextClaims</code> re-leases after 2 minutes) and worker logs.</li>
+            <li>Repeated adjudication failures dead-letter after 5 attempts; re-queue from the claim detail page.</li>
+            <li>Full troubleshooting guide: <code>docs/runbook.md</code>.</li>
+        </ul>
+    </section>
+}
+
+@code {
+    private DashboardStatsDto? _stats;
+    private PagedResult<ClaimQueueItemDto>? _deadLetters;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _stats = await ClaimsApi.GetDashboardStatsAsync();
+        _deadLetters = await ClaimsApi.GetQueueAsync("DeadLettered", pageSize: 10);
+    }
+}

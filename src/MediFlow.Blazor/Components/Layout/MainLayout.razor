@@ -1,0 +1,36 @@
+@inherits LayoutComponentBase
+
+<div class="shell">
+    <aside class="sidebar">
+        <NavMenu />
+    </aside>
+
+    <main class="main">
+        <header class="topbar">
+            <div class="topbar-title">Medicare Operations Console</div>
+            <div class="topbar-meta">
+                <span class="env-pill">Demo environment</span>
+                <span>@TodayLabel</span>
+            </div>
+        </header>
+
+        <article class="content">
+            @Body
+        </article>
+
+        <footer class="footer">
+            MediFlow — Medicare enrollment &amp; claims processing reference build.
+            Data is synthetic; plan names and rates are illustrative.
+        </footer>
+    </main>
+</div>
+
+<div id="blazor-error-ui" data-nosnippet>
+    An unhandled error has occurred.
+    <a href="." class="reload">Reload</a>
+    <span class="dismiss">X</span>
+</div>
+
+@code {
+    private string TodayLabel => DateTime.UtcNow.ToString("MMMM d, yyyy", System.Globalization.CultureInfo.InvariantCulture);
+}
