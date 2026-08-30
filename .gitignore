@@ -1,0 +1,35 @@
+# --- build artifacts ---
+bin/
+obj/
+out/
+artifacts/
+*.user
+*.suo
+.vs/
+.idea/
+*.binlog
+
+# --- local tooling state ---
+.testcontainers/
+*.local.json
+.env
+.env.*
+!.env.example
+
+# --- node (e2e) ---
+node_modules/
+e2e/playwright-report/
+e2e/test-results/
+e2e/.playwright/
+npm-debug.log*
+
+# --- local scratch ---
+*.scratch.md
+tmp/
+
+# --- NEGATE global-gitignore traps (see ~/.gitignore_global: it eats
+# docker-compose*.yml and **/packages/*). Repo rules outrank the global file. ---
+!docker-compose*.yml
+!docker-compose*.yaml
+!packages/**
+packages/**/node_modules/

@@ -1,0 +1,40 @@
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.cs]
+indent_style = space
+indent_size = 4
+csharp_style_namespace_declarations = file_scoped:suggestion
+csharp_style_var_when_type_is_apparent = true:suggestion
+csharp_prefer_braces = true:warning
+dotnet_sort_system_directives_first = false
+dotnet_separate_import_directive_groups = false
+
+# Generated EF migrations legitimately pass constant arrays to(MigrationBuilder) helpers.
+[**/Migrations/*.cs]
+dotnet_diagnostic.CA1861.severity = none
+
+# Test methods use snake_case for readability — standard xUnit convention.
+[tests/**/*.cs]
+dotnet_diagnostic.CA1707.severity = none
+dotnet_diagnostic.CA1711.severity = none
+
+[*.{json,yml,yaml}]
+indent_style = space
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{sh,ps1}]
+indent_style = space
+indent_size = 2
+
+[*.sql]
+indent_style = space
+indent_size = 4
