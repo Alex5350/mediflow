@@ -1,0 +1,28 @@
+flowchart LR
+    staff["Staff browser"]
+    mcpclient["MCP client"]
+
+    subgraph mediflow["MediFlow (one repository)"]
+        blazor["MediFlow.Blazor<br/>dashboard :8090"]
+        api["MediFlow.Api<br/>members / plans / enrollments :8080"]
+        claims["MediFlow.Claims.Api<br/>claims + rollups :8081"]
+        worker["MediFlow.Worker<br/>AdjudicationWorker (x2)"]
+        mcp["MediFlow.Mcp<br/>8 read-only tools (stdio)"]
+    end
+
+    sql[("SQL Server<br/>MediFlow database")]
+    otel["OTLP collector<br/>(optional)"]
+
+    staff -->|"HTTPS"| blazor
+    mcpclient ---|"stdio JSON-RPC"| mcp
+    blazor -->|"typed HttpClients,<br/>X-Api-Key, standard resilience"| api
+    blazor --> claims
+    api -->|"EF Core writes:<br/>enrollments + audit"| sql
+    api -->|"Dapper: usp_SearchMembers,<br/>usp_GetMember360"| sql
+    claims -->|"EF Core transaction:<br/>claim + outbox + audit"| sql
+    claims -->|"Dapper: usp_ClaimsQueue,<br/>usp_GetDenialRollup,<br/>usp_GetDashboardStats"| sql
+    worker -->|"usp_LeaseNextClaims,<br/>usp_RecordAdjudicationResult (TVP)"| sql
+    mcp -->|"reads + dry-run preview"| sql
+    api -.->|"traces / metrics / logs"| otel
+    claims -.-> otel
+    worker -.-> otel
