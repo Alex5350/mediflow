@@ -1,0 +1,12 @@
+{
+  "servers": {
+    "mediflow": {
+      "type": "stdio",
+      "command": "dotnet",
+      "args": ["run", "--project", "${workspaceFolder}/src/MediFlow.Mcp", "--no-build"],
+      "env": {
+        "ConnectionStrings__MediFlowDb": "Server=localhost,1433;Database=MediFlow;User ID=sa;Password=MediFlow!Dev1;TrustServerCertificate=True;Encrypt=True"
+      }
+    }
+  }
+}

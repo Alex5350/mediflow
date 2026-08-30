@@ -1,0 +1,108 @@
+name: security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '0 6 * * 1'   # weekly Monday 06:00 UTC rescan
+
+permissions:
+  contents: read
+
+jobs:
+  codeql:
+    name: CodeQL SAST (csharp)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: csharp
+          queries: security-extended
+      - uses: github/codeql-action/autobuild@v3
+      - uses: github/codeql-action/analyze@v3
+
+  snyk:
+    name: Snyk (SCA + SAST + container)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    # Snyk runs when the repo secret SNYK_TOKEN is configured; the job is a
+    # no-op otherwise so forks/PRs stay green without credentials.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: SCA — dependency vulnerabilities
+        uses: snyk/actions/dotnet@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high --sarif-file-output=snyk-dotnet.sarif
+        continue-on-error: true
+      - name: SAST — code analysis
+        uses: snyk/actions/dotnet@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: code test --severity-threshold=high --sarif-file-output=snyk-sast.sarif
+        continue-on-error: true
+      - name: Container — image scan (enrollment API)
+        if: github.event_name != 'pull_request'
+        run: |
+          if [ -n "${{ secrets.SNYK_TOKEN }}" ]; then
+            docker build -f src/MediFlow.Api/Dockerfile --build-arg PROJECT=MediFlow.Api -t mediflow/api:scan .
+            npx -y snyk container test mediflow/api:scan \
+              --severity-threshold=high --file=src/MediFlow.Api/Dockerfile \
+              --sarif-file-output=snyk-container.sarif
+          else
+            echo "SNYK_TOKEN not set — skipping container scan"
+          fi
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        continue-on-error: true
+      - name: Upload SARIF results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .
+        continue-on-error: true
+
+  secrets:
+    name: gitleaks — secret scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dependency-review:
+    name: dependency review (PRs)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high
+
+  sbom:
+    name: SBOM (SPDX)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: anchore/sbom-action@v0
+        with:
+          format: spdx-json
+          artifact-name: mediflow-sbom.spdx.json
+          upload-artifact: true

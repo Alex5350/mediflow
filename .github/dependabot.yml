@@ -1,0 +1,33 @@
+version: 2
+updates:
+  - package-ecosystem: nuget
+    directory: /src
+    schedule:
+      interval: weekly
+    groups:
+      dotnet-packages:
+        patterns: ["*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /src/MediFlow.Api
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /src/MediFlow.Claims.Api
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /src/MediFlow.Worker
+    schedule:
+      interval: weekly
+  - package-ecosystem: docker
+    directory: /src/MediFlow.Blazor
+    schedule:
+      interval: weekly
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: weekly

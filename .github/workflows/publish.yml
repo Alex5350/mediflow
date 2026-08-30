@@ -1,0 +1,46 @@
+name: publish
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  publish:
+    name: build & push images (GHCR)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        project: [MediFlow.Api, MediFlow.Claims.Api, MediFlow.Worker, MediFlow.Blazor]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ github.repository }}/${{ matrix.project }}
+          tags: |
+            type=sha
+            type=ref,event=branch
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: src/${{ matrix.project }}/Dockerfile
+          build-args: PROJECT=${{ matrix.project }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
