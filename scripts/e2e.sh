@@ -22,13 +22,17 @@ if ! docker inspect "$SQL_CONTAINER" >/dev/null 2>&1; then
   sleep 20
 fi
 
-# Recreate the isolated E2E database (safe: separate from dev/demo data).
+# Isolated E2E database (separate from dev/demo data). sqlcmd resets it when
+# available (local reruns); on clean machines the enrollment API's migrator
+# creates it on first boot.
 echo "==> [2/5] fresh $E2E_DB database"
-docker exec "$SQL_CONTAINER" /opt/mssql/bin/sqlservr & >/dev/null 2>&1 || true
-sqlcmd -S "localhost,$SQL_PORT" -U sa -P 'MediFlow!Dev1' -Q "IF DB_ID('$E2E_DB') IS NOT NULL DROP DATABASE [$E2E_DB]" >/dev/null 2>&1 || true
-sqlcmd -S "localhost,$SQL_PORT" -U sa -P 'MediFlow!Dev1' -Q "CREATE DATABASE [$E2E_DB]" >/dev/null
-
 export ConnectionStrings__MediFlowDb="Server=localhost,$SQL_PORT;Database=$E2E_DB;User ID=sa;Password=MediFlow!Dev1;TrustServerCertificate=True;Encrypt=True"
+if command -v sqlcmd >/dev/null 2>&1; then
+  sqlcmd -S "localhost,$SQL_PORT" -U sa -P 'MediFlow!Dev1' \
+    -Q "IF DB_ID(N'$E2E_DB') IS NOT NULL DROP DATABASE [$E2E_DB]; CREATE DATABASE [$E2E_DB]" >/dev/null
+else
+  echo "    sqlcmd not found — relying on EF migration to create $E2E_DB"
+fi
 export Seed__Enabled=true
 export ASPNETCORE_ENVIRONMENT=Development
 # Only the Enrollment API bootstraps (migrate/seed); the other services must

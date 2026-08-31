@@ -87,4 +87,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build ${{ matrix.project }} image
-        run: docker build -f src/${{ matrix.project }}/Dockerfile --build-arg PROJECT=${{ matrix.project }} -t mediflow/${{ matrix.project }}:${{ github.sha }} .
+        run: |
+            TAG="mediflow/$(echo "${{ matrix.project }}" | tr '[:upper:]' '[:lower:]'):${{ github.sha }}"
+            docker build -f src/${{ matrix.project }}/Dockerfile --build-arg PROJECT=${{ matrix.project }} -t "$TAG" .
