@@ -67,6 +67,9 @@ echo "    all services healthy (seeded: deterministic demo data)"
 
 echo "==> [5/5] Playwright ($MODE)"
 cd e2e
+# One-command guarantee: dependencies + browser on a clean machine.
+npm ci --silent
+npx playwright install --with-deps chromium
 case "$MODE" in
   --headed) npx playwright test --headed ;;
   --ui)     npx playwright test --ui ;;
