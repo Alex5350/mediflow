@@ -179,7 +179,8 @@ Four tiers, each owning a distinct failure class; counts are current:
 - **65 domain unit tests** (`tests/MediFlow.Domain.UnitTests`): enrollment windows,
   adjudication rules, benefit math, MBI/NPI/Money value objects. Pure, deterministic, no
   clock (rules take `asOfUtc` as an argument); CI enforces an 80% line-coverage threshold
-  on this project.
+  on this project via a coverlet.msbuild gate that fails the build below it (the suite
+  currently measures 80.7%).
 - **15 integration tests** (`tests/MediFlow.IntegrationTests`): one Testcontainers SQL
   Server per assembly (azure-sql-edge on arm64, mssql 2022 on CI), migrated, proc-loaded,
   and seeded by the same bootstrap the enrollment API runs; two `WebApplicationFactory`

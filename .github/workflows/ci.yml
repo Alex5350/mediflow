@@ -35,11 +35,13 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
-      - name: Domain unit tests
+      # coverlet.msbuild props, not the collector: coverlet.collector ignores
+      # -p:Threshold*, which let a sub-80% domain suite pass silently.
+      - name: Domain unit tests (80% line coverage gate)
         run: >
           dotnet test tests/MediFlow.Domain.UnitTests
-          --collect:"XPlat Code Coverage" --results-directory ./coverage
-          -p:Threshold=80 -p:ThresholdStat=line -p:ThresholdType=lines
+          -p:CollectCoverage=true -p:CoverletOutputFormat=cobertura
+          -p:Threshold=80 -p:ThresholdType=line -p:ThresholdStat=minimum
       - name: Blazor component tests
         run: dotnet test tests/MediFlow.Blazor.UnitTests
 

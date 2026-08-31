@@ -22,9 +22,12 @@ dotnet test tests/MediFlow.Domain.UnitTests
 ```
 
 Fast (<a few seconds) and hermetic. CI additionally enforces line coverage on
-this project: `--collect:"XPlat Code Coverage"` with `-p:Threshold=80
--p:ThresholdType=lines` - a change that drops domain coverage below 80 % fails
-the build.
+this project through the coverlet.msbuild package (`-p:CollectCoverage=true
+-p:Threshold=80 -p:ThresholdType=line -p:ThresholdStat=minimum`) - a change
+that drops domain line coverage below 80 % fails the build. The suite currently
+measures 80.7 %. The other tiers keep coverlet.collector and are not gated:
+their coverage depends on a database or a browser, so a line threshold there
+would measure environment wiring more than logic.
 
 ### Blazor component tests
 
