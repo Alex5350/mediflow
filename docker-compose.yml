@@ -1,0 +1,83 @@
+# Full MediFlow demo stack. `docker compose up --build` brings up SQL Server,
+# both APIs, the adjudication worker and the Blazor dashboard with deterministic
+# seed data. Only the enrollment API bootstraps the database (single owner —
+# see docs/onboarding.md).
+services:
+  sql:
+    image: ${SQL_IMAGE:-mcr.microsoft.com/azure-sql-edge:latest}   # arm64-friendly; x64 hosts can use mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      ACCEPT_EULA: "1"
+      MSSQL_SA_PASSWORD: "MediFlow!Dev1"
+    ports:
+      - "1433:1433"
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql/bin/sqlservr --version >/dev/null 2>&1 || true"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
+
+  api:
+    build:
+      context: .
+      dockerfile: src/MediFlow.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__MediFlowDb: "Server=sql,1433;Database=MediFlow;User ID=sa;Password=MediFlow!Dev1;TrustServerCertificate=True;Encrypt=True"
+      Api__Required: "true"
+      Api__Keys: "${MEDIFLOW_API_KEYS:-mediflow-dev-key}"
+      Seed__Enabled: "true"
+    ports:
+      - "8080:8080"
+    depends_on:
+      sql:
+        condition: service_healthy
+
+  claims-api:
+    build:
+      context: .
+      dockerfile: src/MediFlow.Claims.Api/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__MediFlowDb: "Server=sql,1433;Database=MediFlow;User ID=sa;Password=MediFlow!Dev1;TrustServerCertificate=True;Encrypt=True"
+      Api__Required: "true"
+      Api__Keys: "${MEDIFLOW_API_KEYS:-mediflow-dev-key}"
+      Database__InitializeOnStartup: "false"   # api owns bootstrap
+    ports:
+      - "8081:8080"
+    depends_on:
+      sql:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  worker:
+    build:
+      context: .
+      dockerfile: src/MediFlow.Worker/Dockerfile
+    environment:
+      ConnectionStrings__MediFlowDb: "Server=sql,1433;Database=MediFlow;User ID=sa;Password=MediFlow!Dev1;TrustServerCertificate=True;Encrypt=True"
+      Database__InitializeOnStartup: "false"
+    depends_on:
+      sql:
+        condition: service_healthy
+      api:
+        condition: service_started
+
+  blazor:
+    build:
+      context: .
+      dockerfile: src/MediFlow.Blazor/Dockerfile
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      Api__EnrollmentBaseUrl: "http://api:8080"
+      Api__ClaimsBaseUrl: "http://claims-api:8080"
+      Api__Key: "${MEDIFLOW_API_KEYS:-mediflow-dev-key}"
+    ports:
+      - "8090:8080"
+    depends_on:
+      - api
+      - claims-api

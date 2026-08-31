@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediflow-api
+  namespace: mediflow
+  labels: { app: mediflow-api }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: mediflow-api } }
+  template:
+    metadata:
+      labels: { app: mediflow-api }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/alex5350/mediflow/MediFlow.Api:sha-placeholder
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: mediflow-config }
+            - secretRef: { name: mediflow-secrets }
+          # This deployment owns database bootstrap.
+          env:
+            - name: Database__InitializeOnStartup
+              value: "true"
+            - name: Seed__Enabled
+              value: "false"
+          readinessProbe:
+            httpGet: { path: /health/ready, port: 8080 }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /health/live, port: 8080 }
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mediflow-api
+  namespace: mediflow
+spec:
+  selector: { app: mediflow-api }
+  ports: [{ port: 8080, targetPort: 8080 }]

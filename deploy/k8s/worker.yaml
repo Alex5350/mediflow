@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mediflow-worker
+  namespace: mediflow
+  labels: { app: mediflow-worker }
+spec:
+  replicas: 2
+  selector: { matchLabels: { app: mediflow-worker } }
+  template:
+    metadata:
+      labels: { app: mediflow-worker }
+    spec:
+      containers:
+        - name: api
+          image: ghcr.io/alex5350/mediflow/MediFlow.worker:sha-placeholder
+          ports: [{ containerPort: 8080 }]
+          envFrom:
+            - configMapRef: { name: mediflow-config }
+            - secretRef: { name: mediflow-secrets }
+          # This deployment owns database bootstrap.
+          env:
+            - name: Database__InitializeOnStartup
+              value: "true"
+            - name: Seed__Enabled
+              value: "false"
+          resources:
+            requests: { cpu: 100m, memory: 256Mi }
+            limits: { cpu: 500m, memory: 512Mi }
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
