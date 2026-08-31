@@ -21,7 +21,11 @@ export Seed__Reset="${SEED_RESET:-false}"
 export ASPNETCORE_ENVIRONMENT=Development
 
 echo "==> building"
-dotnet build -v quiet 2>/dev/null
+if ! dotnet build -v quiet > /tmp/mediflow-build.log 2>&1; then
+  echo "build failed - last 40 lines of /tmp/mediflow-build.log:"
+  tail -40 /tmp/mediflow-build.log
+  exit 1
+fi
 
 echo "==> starting services"
 dotnet run --project src/MediFlow.Api --no-build > /tmp/mediflow-api.log 2>&1 &
@@ -34,10 +38,15 @@ Seed__Enabled=false dotnet run --project src/MediFlow.Blazor --no-build > /tmp/m
 echo $! > /tmp/mediflow-blazor.pid
 
 for url in "http://localhost:8080/health/live" "http://localhost:8081/health/live" "http://localhost:8090/health/live"; do
+  healthy=0
   for _ in $(seq 1 90); do
-    if curl -sf -o /dev/null "$url"; then break; fi
+    if curl -sf -o /dev/null "$url"; then healthy=1; break; fi
     sleep 2
   done
+  if [ "$healthy" -ne 1 ]; then
+    echo "timed out waiting for $url after 180s - check /tmp/mediflow-*.log"
+    exit 1
+  fi
 done
 
 echo
@@ -46,4 +55,4 @@ echo "  Dashboard    http://localhost:8090"
 echo "  Enrollment API  http://localhost:8080/scalar/v1  (X-Api-Key not required in Development)"
 echo "  Claims API      http://localhost:8081/scalar/v1"
 echo "  MCP server      ./scripts/mcp-smoke.sh"
-echo "Logs in /tmp/mediflow-*.log — stop with ./scripts/stop.sh"
+echo "Logs in /tmp/mediflow-*.log - stop with ./scripts/stop.sh"

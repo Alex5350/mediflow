@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Self-bootstrapping E2E run: isolated database, all four services, Playwright.
-# Dev data is never touched — the suite runs against MediFlow_E2E.
+# Dev data is never touched - the suite runs against MediFlow_E2E.
 #
 #   ./scripts/e2e.sh              # headless (default)
 #   ./scripts/e2e.sh --headed     # watch it drive a real browser
@@ -31,7 +31,7 @@ if command -v sqlcmd >/dev/null 2>&1; then
   sqlcmd -S "localhost,$SQL_PORT" -U sa -P 'MediFlow!Dev1' \
     -Q "IF DB_ID(N'$E2E_DB') IS NOT NULL DROP DATABASE [$E2E_DB]; CREATE DATABASE [$E2E_DB]" >/dev/null
 else
-  echo "    sqlcmd not found — relying on EF migration to create $E2E_DB"
+  echo "    sqlcmd not found - relying on EF migration to create $E2E_DB"
 fi
 export Seed__Enabled=true
 export ASPNETCORE_ENVIRONMENT=Development
@@ -40,7 +40,11 @@ export ASPNETCORE_ENVIRONMENT=Development
 export Database__InitializeOnStartup=true
 
 echo "==> [3/5] building"
-dotnet build -v quiet 2>/dev/null
+if ! dotnet build -v quiet > /tmp/mediflow-e2e-build.log 2>&1; then
+  echo "build failed - last 40 lines of /tmp/mediflow-e2e-build.log:"
+  tail -40 /tmp/mediflow-e2e-build.log
+  exit 1
+fi
 
 echo "==> [4/5] services (api 8080, claims 8081, worker, blazor 8090)"
 dotnet run --project src/MediFlow.Api --no-build > /tmp/mediflow-e2e-api.log 2>&1 &
@@ -58,10 +62,15 @@ cleanup() {
 trap cleanup EXIT
 
 for url in "http://localhost:8080/health/live" "http://localhost:8081/health/live" "http://localhost:8090/health/live"; do
+  healthy=0
   for _ in $(seq 1 90); do
-    if curl -sf -o /dev/null "$url"; then break; fi
+    if curl -sf -o /dev/null "$url"; then healthy=1; break; fi
     sleep 2
   done
+  if [ "$healthy" -ne 1 ]; then
+    echo "timed out waiting for $url after 180s - check /tmp/mediflow-e2e-*.log"
+    exit 1
+  fi
 done
 echo "    all services healthy (seeded: deterministic demo data)"
 

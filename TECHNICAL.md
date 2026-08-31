@@ -170,7 +170,7 @@ detail payload; there is no path that mutates or deletes audit rows.
 | CI/CD + DevSecOps | CodeQL, Snyk, gitleaks, SBOM, Dependabot, GHCR publishing, non-root images |
 | Design patterns / secure coding | Rules pipeline, outbox, state machines, constant-time key checks, warnings-as-errors |
 | Troubleshooting / operations | Runbook, custom OTel metrics, audit trail, dead-letter tooling |
-| Copilot & MCP servers | Read-only MCP server with 8 tools + `.github/copilot-instructions.md` |
+| Copilot & MCP servers | Read-only MCP server with 8 tools (`src/MediFlow.Mcp`, [docs/mcp-server.md](docs/mcp-server.md)) |
 
 ## Testing
 

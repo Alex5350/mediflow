@@ -54,7 +54,10 @@ flowchart LR
 ```
 
 The same diagram is kept as a standalone file for rendering outside this
-document: `docs/diagrams/architecture.mmd`.
+document: `docs/diagrams/architecture.mmd`. The animated variant
+(`docs/diagrams/architecture-flow.svg`) is built by FlowInk from
+`docs/diagrams/architecture-flow.json`, which is the editable source for that
+render.
 
 ### Containers
 
