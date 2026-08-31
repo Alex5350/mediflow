@@ -35,8 +35,12 @@ In front of the key check, every response carries baseline hardening headers
 (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`,
 `Referrer-Policy: no-referrer`), and a fixed-window rate limiter is configured
 (100 permits per 1-minute window, `QueueLimit = 0`, rejection via `429`) so a
-runaway caller cannot hammer the APIs. The Blazor dashboard adds HSTS, a
-production exception handler, and antiforgery.
+runaway caller cannot hammer the APIs. The limit applies globally through a
+partitioned limiter: each `X-Api-Key` gets its own window and anonymous
+health/docs traffic is bucketed by client IP, so one loud caller cannot starve
+the probes. The window size is configurable (`RateLimit:PermitLimit`, default
+`100`) if an environment needs a tighter or looser budget. The Blazor dashboard
+adds HSTS, a production exception handler, and antiforgery.
 
 **Keys, where they live.** Configuration only - never code. The committed
 `mediflow-dev-key` (in the two `appsettings.json` files and `.env.example`) is

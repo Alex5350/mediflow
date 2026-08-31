@@ -8,6 +8,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using OpenTelemetry.Instrumentation.SqlClient;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
@@ -19,6 +20,7 @@ using Serilog;
 using Serilog.AspNetCore;
 using System.Diagnostics.CodeAnalysis;
 using System.Text.Json;
+using System.Threading.RateLimiting;
 
 public static class WebServiceExtensions
 {
@@ -42,23 +44,32 @@ public static class WebServiceExtensions
         builder.Services.AddHttpLogging(options => { });
 
         // Fixed-window limiter: 100 requests/minute per API key (anonymous bucket for
-        // health checks). Protection, not billing — production tunes per consumer.
-        builder.Services.AddRateLimiter(options =>
-        {
-            options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-            options.AddFixedWindowLimiter("default", window =>
+        // health checks). Protection, not billing - production tunes per consumer via
+        // RateLimit:PermitLimit. The global limiter covers every endpoint without
+        // per-route opt-in, so the documented 429 mitigation cannot go inert again.
+        builder.Services.Configure<RateLimitOptions>(builder.Configuration.GetSection(RateLimitOptions.SectionName));
+        builder.Services.AddRateLimiter(options => options.RejectionStatusCode = StatusCodes.Status429TooManyRequests);
+        builder.Services.AddOptions<RateLimiterOptions>()
+            .Configure<IOptions<RateLimitOptions>>((options, rateLimit) =>
             {
-                window.PermitLimit = 100;
-                window.Window = TimeSpan.FromMinutes(1);
-                window.QueueLimit = 0;
+                options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+                {
+                    var apiKey = context.Request.Headers["X-Api-Key"].ToString();
+                    var partition = apiKey.Length > 0 ? $"key:{apiKey}" : $"ip:{context.Connection.RemoteIpAddress}";
+                    return RateLimitPartition.GetFixedWindowLimiter(partition, _ => new FixedWindowRateLimiterOptions
+                    {
+                        PermitLimit = rateLimit.Value.PermitLimit,
+                        Window = TimeSpan.FromMinutes(1),
+                        QueueLimit = 0,
+                    });
+                });
             });
-        });
 
         builder.Services.AddHealthChecks()
             .AddDbContextCheck<MediFlowDbContext>("medi flow-db", tags: ["ready"]);
 
         // Traces + metrics ship to OTLP when an endpoint is configured (compose/Azure),
-        // otherwise they stay local — Serilog owns the console.
+        // otherwise they stay local - Serilog owns the console.
         builder.Services.AddOpenTelemetry()
             .ConfigureResource(resource => resource.AddService(serviceName))
             .WithTracing(tracing => tracing
@@ -124,4 +135,15 @@ public static class WebServiceExtensions
         });
         return context.Response.WriteAsync(payload);
     }
+}
+
+/// <summary>Rate limiter options (RateLimit section). Defaults reproduce the
+/// documented 100 requests/minute fixed window; tests shrink the limit to
+/// observe 429 behavior without waiting a full window.</summary>
+public sealed class RateLimitOptions
+{
+    public const string SectionName = "RateLimit";
+
+    /// <summary>Permits per 1-minute window, per API key (per IP for anonymous paths).</summary>
+    public int PermitLimit { get; set; } = 100;
 }

@@ -6,9 +6,10 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
 
-/// <summary>MediFlow.Api host pointed at the test container. API key stays enforced —
-/// tests exercise the real auth path.</summary>
-public sealed class EnrollmentApiFactory(string connectionString) : WebApplicationFactory<EnrollmentApiEntryPoint>
+/// <summary>MediFlow.Api host pointed at the test container. API key stays enforced -
+/// tests exercise the real auth path. The rate-limit permit can be shrunk per host
+/// so throttling is observable without a full 100-request window.</summary>
+public sealed class EnrollmentApiFactory(string connectionString, int rateLimitPermitLimit = 100) : WebApplicationFactory<EnrollmentApiEntryPoint>
 {
     public const string ApiKey = "integration-test-key";
 
@@ -25,6 +26,7 @@ public sealed class EnrollmentApiFactory(string connectionString) : WebApplicati
                 ["Api:Keys"] = ApiKey,
                 ["Database:InitializeOnStartup"] = "false",
                 ["Seed:Enabled"] = "false",
+                ["RateLimit:PermitLimit"] = rateLimitPermitLimit.ToString(System.Globalization.CultureInfo.InvariantCulture),
             });
         });
     }
