@@ -20,7 +20,7 @@ COPY . .
 RUN dotnet publish "src/${PROJECT}/${PROJECT}.csproj" -c Release -o /app/publish \
     -p:UseAppHost=false
 
-FROM mcr.microsoft.com/dotnet/aspnet:10.0-alpine AS final
+FROM mcr.microsoft.com/dotnet/aspnet:11.0-alpine AS final
 ARG PROJECT
 WORKDIR /app
 COPY --from=build /app/publish .
