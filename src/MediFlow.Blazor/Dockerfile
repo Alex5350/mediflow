@@ -1,6 +1,6 @@
 # Multi-stage build shared by all MediFlow services. Build with:
 #   docker build -f src/MediFlow.Blazor/Dockerfile --build-arg PROJECT=MediFlow.Blazor .
-FROM mcr.microsoft.com/dotnet/sdk:10.0-alpine AS build
+FROM mcr.microsoft.com/dotnet/sdk:11.0-alpine AS build
 ARG PROJECT
 WORKDIR /src
 
